@@ -1,0 +1,91 @@
+name: CI
+
+# Unit tests of Flight Studio, then a native cFS build that must pass the scenarios.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install test tools
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -r requirements-dev.txt
+
+      - name: Run unit tests
+        run: .venv/bin/python -m pytest --junitxml=unit-tests.xml
+
+      - name: Keep the unit test report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unit-tests
+          path: unit-tests.xml
+
+  system:
+    name: Native build and scenarios
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      # The NASA GroundSystem modules import Qt widgets; no display is used.
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Check out repository and cFS
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - name: Install build tools and Ground Station packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake libegl1 libgl1
+          python3 -m venv .venv
+          .venv/bin/pip install -r ground_station/requirements.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build cFS for this computer
+        run: |
+          ./start --no-ui profile --native
+          ./start --no-ui build --target native
+
+      - name: Start cFS
+        run: ./start --no-ui run --target native --no-follow
+
+      - name: Run scenarios
+        run: >
+          ./start --no-ui scenario scenarios/*.json --target native
+          --report scenario-report.json --junit scenario-report.xml
+
+      - name: Save the cFS output and stop cFS
+        if: always()
+        run: |
+          # logs follows the output until interrupted
+          timeout 15 ./start --no-ui logs --target native > cfs-output.log 2>&1 || true
+          ./start --no-ui stop --target native || true
+
+      - name: Keep the scenario reports and cFS output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: system-test
+          path: |
+            scenario-report.json
+            scenario-report.xml
+            cfs-output.log
