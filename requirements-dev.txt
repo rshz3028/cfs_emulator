@@ -1,0 +1,2 @@
+# Tools for developing Flight Studio itself: python3 -m pytest
+pytest>=8,<10

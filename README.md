@@ -182,5 +182,8 @@ flowchart TB
 - [Scenarios](scenarios/README.md) covers scripted command and telemetry tests that run
   without the browser and report pass or fail.
 
+`python3 -m pytest` runs the unit tests of Flight Studio after
+`pip install -r requirements-dev.txt`. They need no cFS build.
+
 `./start --help` lists the commands, and `./start --no-ui COMMAND --help` shows the
 options of one command.

@@ -719,6 +719,27 @@ print(json.dumps({'service':state or 'unknown','pids':pids,'running':running}))'
         self._save("deployed.json", records)
         return records[target]
 
+    @staticmethod
+    def _activate_release_command(directory, remote):
+        """Shell command that points studio/current at one uploaded release and starts the service.
+
+        After a successful start it keeps this release and the one it replaced (for
+        rollback); older and failed uploads would otherwise fill the board's storage.
+        """
+        current, releases = directory + "/studio/current", directory + "/releases"
+        prune = ("for d in " + shlex.quote(releases) + "/*/; do d=${d%/}; "
+                 "if [ -d \"$d\" ] && [ \"$d\" != " + shlex.quote(remote) + " ] && [ \"$d\" != \"$previous\" ]; "
+                 "then rm -rf -- \"$d\"; fi; done")
+        return ("set -e; "
+                "if pgrep -x core-cpu1 >/dev/null; then echo 'Another cFS instance is running. Stop it before starting this one.'; exit 1; fi; "
+                "test ! -e " + shlex.quote(current) + " || test -L " + shlex.quote(current) + "; "
+                "previous=$(readlink " + shlex.quote(current) + " 2>/dev/null || true); "
+                "ln -sfn " + shlex.quote(remote) + " " + shlex.quote(current + ".new") +
+                " && mv -Tf " + shlex.quote(current + ".new") + " " + shlex.quote(current) +
+                " && sudo -n systemctl start cfs-studio.service" +
+                " && sleep 2 && sudo -n systemctl is-active --quiet cfs-studio.service || exit 1; " +
+                "{ " + prune + "; } || echo 'Could not remove old cFS releases from the board.'")
+
     def _run_physical(self, emit, cancel, connection, sensorless, board):
         root, payload, state = self._require_build(sensorless, target="physical")
         if not board["systemd"]:
@@ -744,23 +765,8 @@ print(json.dumps({'service':state or 'unknown','pids':pids,'running':running}))'
                 tar.add(payload, arcname="cpu1")
             archive.seek(0)
             self._stream(argv + [unpack], emit, cancel, stdin=archive, timeout=180)
-        current = self.board_directory(board, connection) + "/studio/current"
-        releases = self.board_directory(board, connection) + "/releases"
         self.assert_can_start('physical', connection)
-        # After a successful start, keep this release and the one it replaced (for rollback);
-        # older and failed uploads would otherwise fill the board's storage.
-        prune = ("for d in " + shlex.quote(releases) + "/*/; do d=${d%/}; "
-                 "if [ -d \"$d\" ] && [ \"$d\" != " + shlex.quote(remote) + " ] && [ \"$d\" != \"$previous\" ]; "
-                 "then rm -rf -- \"$d\"; fi; done")
-        command = ("set -e; "
-                   "if pgrep -x core-cpu1 >/dev/null; then echo 'Another cFS instance is running. Stop it before starting this one.'; exit 1; fi; "
-                   "test ! -e " + shlex.quote(current) + " || test -L " + shlex.quote(current) + "; "
-                   "previous=$(readlink " + shlex.quote(current) + " 2>/dev/null || true); "
-                   "ln -sfn " + shlex.quote(remote) + " " + shlex.quote(current + ".new") +
-                   " && mv -Tf " + shlex.quote(current + ".new") + " " + shlex.quote(current) +
-                   " && sudo -n systemctl start cfs-studio.service" +
-                   " && sleep 2 && sudo -n systemctl is-active --quiet cfs-studio.service || exit 1; " +
-                   "{ " + prune + "; } || echo 'Could not remove old cFS releases from the board.'")
+        command = self._activate_release_command(self.board_directory(board, connection), remote)
         self._stream(argv + [command], emit, cancel, timeout=30)
         self.probe(connection, emit, cancel)
         return self._deploy_record("physical", state, sensorless=sensorless, connection=self.connection(connection), release=remote)
