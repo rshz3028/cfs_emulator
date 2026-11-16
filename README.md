@@ -179,6 +179,8 @@ flowchart TB
   of a value from QMP to the flight software.
 - [Ground Station](ground_station/README.md) covers definitions, UDP transport and what
   each status confirms.
+- [Scenarios](scenarios/README.md) covers scripted command and telemetry tests that run
+  without the browser and report pass or fail.
 
 `./start --help` lists the commands, and `./start --no-ui COMMAND --help` shows the
 options of one command.

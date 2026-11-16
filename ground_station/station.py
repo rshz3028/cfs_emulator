@@ -251,6 +251,25 @@ class GroundStation:
             self._commands.append(event)
             return event
 
+    def connected(self):
+        with self._lock:
+            return self._connected()
+
+    def packets_after(self, event_id, timeout=0):
+        """Telemetry newer than event_id, waiting up to timeout seconds for the first packet.
+
+        The history keeps 256 packets, so a caller that must see every packet keeps
+        calling this with the event_id of the last packet it received.
+        """
+        deadline = time.monotonic() + timeout
+        with self._updates:
+            while True:
+                packets = [copy.deepcopy(packet) for packet in self._history if packet['event_id'] > event_id]
+                remaining = deadline - time.monotonic()
+                if packets or remaining <= 0 or not self._connected():
+                    return packets
+                self._updates.wait(remaining)
+
     def stop(self):
         self._stop.set()
         with self._updates:

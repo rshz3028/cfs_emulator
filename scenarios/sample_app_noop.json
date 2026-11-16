@@ -1,0 +1,11 @@
+{
+  "name": "SAMPLE_APP accepts a NOOP command",
+  "description": "Checks the whole command path: the command leaves the Ground Station, CI_LAB puts it on the software bus, SAMPLE_APP processes it and reports it in an event and in its housekeeping counter.",
+  "steps": [
+    {"expect_telemetry": {"packet": "SAMPLE_APP_HkTlm_t"}, "timeout": 15},
+    {"send": "SAMPLE_APP_NOOP_CC"},
+    {"expect_event": {"app": "SAMPLE_APP", "contains": "NOOP command"}, "timeout": 5},
+    {"expect_telemetry": {"packet": "SAMPLE_APP_HkTlm_t", "field": "CommandCounter", "increases_by": 1}, "timeout": 15},
+    {"expect_telemetry": {"packet": "SAMPLE_APP_HkTlm_t", "field": "CommandErrorCounter", "equals": 0}, "timeout": 15}
+  ]
+}

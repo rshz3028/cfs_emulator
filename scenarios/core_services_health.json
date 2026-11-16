@@ -1,0 +1,15 @@
+{
+  "name": "cFE core services report housekeeping without command errors",
+  "description": "Checks that the five cFE core services are running and sending housekeeping telemetry, and that Executive Services accepts a NOOP command.",
+  "steps": [
+    {"expect_telemetry": {"packet": "CFE_ES_HousekeepingTlm_t"}, "timeout": 15},
+    {"expect_telemetry": {"packet": "CFE_EVS_HousekeepingTlm_t"}, "timeout": 15},
+    {"expect_telemetry": {"packet": "CFE_SB_HousekeepingTlm_t"}, "timeout": 15},
+    {"expect_telemetry": {"packet": "CFE_TBL_HousekeepingTlm_t"}, "timeout": 15},
+    {"expect_telemetry": {"packet": "CFE_TIME_HousekeepingTlm_t"}, "timeout": 15},
+    {"send": "CFE_ES_NOOP_CC"},
+    {"expect_event": {"app": "CFE_ES"}, "timeout": 5},
+    {"expect_telemetry": {"packet": "CFE_ES_HousekeepingTlm_t", "field": "CommandCounter", "increases_by": 1}, "timeout": 15},
+    {"expect_telemetry": {"packet": "CFE_ES_HousekeepingTlm_t", "field": "CommandErrorCounter", "equals": 0}, "timeout": 15}
+  ]
+}

@@ -24,6 +24,7 @@ Command line:
   ./start --no-ui profile --board raspi4b --os raspios
   ./start --no-ui profile --native
   ./start --no-ui boot --target qemu
+  ./start --no-ui scenario scenarios/sample_app_noop.json
   ./start --no-ui simulate-preview --model tmp105
   ./start --no-ui app new attitude_app
   ./start --no-ui app delete attitude_app
@@ -85,8 +86,15 @@ def main(argv=None):
                            help='remove excludes the library from the mission; delete also removes its sources')
     libraries.add_argument('name', nargs='?')
     libraries.add_argument('--preview', action='store_true')
-    for action in ('setup', 'build', 'boot', 'run', 'stop', 'shutdown', 'connect', 'probe', 'logs', 'values', 'simulate-preview'):
+    for action in ('setup', 'build', 'boot', 'run', 'stop', 'shutdown', 'connect', 'probe', 'logs', 'values',
+                   'simulate-preview', 'scenario'):
         command = commands.add_parser(action)
+        if action == 'scenario':
+            command.description = ('Send the commands of each scenario file to the running cFS and check the '
+                                   'telemetry it expects. Exits 0 when every scenario passes and 1 otherwise.')
+            command.add_argument('files', nargs='+', metavar='FILE', help='Scenario JSON file (see scenarios/README.md)')
+            command.add_argument('--report', metavar='PATH', help='Write the full result as JSON')
+            command.add_argument('--junit', metavar='PATH', help='Write the result as JUnit XML for CI')
         command.add_argument('--target', choices=('native', 'qemu', 'physical'),
                              help='Defaults to the target selected in the interface or profile command')
         command.add_argument('--host', help='Physical board hostname, IP or SSH alias')
@@ -199,6 +207,18 @@ def main(argv=None):
                 connection['identity_file'] = identity
             if directory:
                 connection['directory'] = directory
+        if args.command == 'scenario':
+            from scenarios.runner import junit, run_files
+            output = sys.stdout
+            report = run_files(ROOT, args.files, target, connection,
+                               emit=lambda line: print(line, file=output, flush=True))
+            if args.report:
+                Path(args.report).write_text(json.dumps(report, indent=2) + '\n')
+            if args.junit:
+                Path(args.junit).write_text(junit(report))
+            passed = sum(item['verdict'] == 'passed' for item in report['scenarios'])
+            print(f'{passed} of {len(report["scenarios"])} scenarios passed.')
+            return 0 if report['verdict'] == 'passed' else 1
         options = {'target': target, 'connection': connection, 'sensorless': sensorless}
         if args.command == 'logs':
             options['kind'] = args.kind
